@@ -4,10 +4,3 @@ export interface AES {
     authTag: string
 }
 
-export interface ServerAlert {
-    type: string
-    cipher: string
-    iv: string
-    key?: string
-}
-

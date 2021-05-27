@@ -4,14 +4,18 @@ var subjectSchema = new Schema({
     name: {
         type: String,
     },
-    students: [{
+    date: {
+        type: String
+    },
+    certs: [{
         type: String
     }]
 });
 
 export interface Subject {
     name: string
-    students: Array<string>
+    date: string
+    certs: Array<string>
 }
 
 export default mongoose.model<Subject>('Materia', subjectSchema,'materias');

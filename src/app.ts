@@ -3,12 +3,14 @@ import cors from 'cors'
 import * as ClaveRSA from './rsa'
 import * as bigintConversion from 'bigint-conversion'
 import Subject from './models/subject'
-import bcu from 'bigint-crypto-utils'
+import * as bcu from 'bigint-crypto-utils'
 import * as objectSha from 'object-sha';
+import './database';
 
 //Constants
-const port = 3000
-let keyRSA: ClaveRSA.rsaKeyPair
+const port = 3000;
+let keyRSA: ClaveRSA.rsaKeyPair;
+let randomGlobal: bigint;
 
 
 //Inizializations
@@ -34,40 +36,59 @@ app.post('/firmar', async (req, res) => {
   const firma: bigint = keys.privateKey.sign(bigintConversion.hexToBigint(cegado));
   console.log(firma);
   console.log("Firmado: " + bigintConversion.bigintToHex(firma));
-  return res.status(200).json(bigintConversion.bigintToHex(firma));
+  const json = '{"firma": "' + bigintConversion.bigintToHex(firma) + '"}';
+  return res.status(200).json(JSON.parse(json));
 } catch (err) {
   console.log(err);
   return res.status(400).json(err);
 }})
-
-app.post('/registrarse', async(req,res) => {
-  console.log("Datos: " + req.body);
+app.post('/validar', async(req,res) => {
   try{
-    const results = await Subject.find({"subject": {"name": req.body.name}});
-    if(results != null)
-    {
-      Subject.findOneAndUpdate({name: req.params.name}, {"$addToSet": {certificados: req.body.certificado}}).exec(function(err, result) {
-        console.log("Subject Update: ",result);
-        if (err) 
-            return res.status(400).send({message: 'Error'});
-        else
-        return res.status(200).json(result);
-    });}
-    else{
-      const subject = new Subject({
-        "name": req.body.name,
-        "certificados": [req.body.certificado]
-      });
-      await subject.save().then(result => {
-        return res.status(200).json(result);
-      });
-    }
-    return res.status(200).json(results);
+    var signaA: string = req.body.signature;
+    var e: string = req.body.pubAe;
+    var n: string = req.body.pubAn;
+    var pubA: ClaveRSA.RsaPublicKey = new ClaveRSA.RsaPublicKey(bigintConversion.hexToBigint(e),bigintConversion.hexToBigint(n))
+    
+    var randomTemp: bigint = bcu.randBetween(bigintConversion.hexToBigint("34312431423424"),bigintConversion.hexToBigint("212313")); 
+    console.log("Reto Nonce: " + randomTemp);
+    randomGlobal = randomTemp;
+    var cifrado:string = bigintConversion.bigintToHex(pubA.encrypt(randomTemp));
+    return res.status(200).json(cifrado);
 } catch (err) {
+    console.log(err);
     return res.status(404).json(err);
 }
+});
+app.post('/registrarse', async(req,res) => {
+  try{
+    var nonceStr: bigint = req.body.nonce;
+    var signaA: string = req.body.signature;
+    var name: string = req.body.name;
+    if(randomGlobal != nonceStr){
+      console.log("No se ha podido verificar tu identidad");
+      return res.status(403).json("No se ha podido verificar tu identidad");
+    }
+    else{
+      console.log("Identidad anonima verificada");
+      console.log(name);
+      await Subject.findOne({"subject": {"name": name}}).then(value => {
+        if(value != null){
+          Subject.findOneAndUpdate({name}, {"$addToSet": {certificados: signaA}}).exec(function(err, result) {
+            console.log("Added");
+            if(err){
+              console.log(err);
+              return res.status(404).json(err);
+            }
+            else
+            return res.status(200).json("Gracias por tu aviso anonimo");
+          });
+        }
+          else
+          return res.status(401).json("Clase no existente");
+        });
+    }
+  } catch (err) {
+      console.log(err);
+      return res.status(404).json(err);
+  }
 })
-
-const setPrivServer = function(privada: ClaveRSA.RsaPrivateKey) {
-  keyRSA.privateKey = privada;
-}
