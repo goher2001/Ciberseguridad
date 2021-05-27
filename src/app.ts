@@ -1,20 +1,15 @@
 import express from 'express'
 import cors from 'cors'
-import * as rsa from './rsa'
-import * as aes from './aes'
-import * as post from './models/post'
-import * as cipher from './models/cipher'
+import * as ClaveRSA from './rsa'
 import * as bigintConversion from 'bigint-conversion'
+import Subject from './models/subject'
+import bcu from 'bigint-crypto-utils'
+import * as objectSha from 'object-sha';
 
 //Constants
 const port = 3000
-let keyRSA: rsa.rsaKeyPair
-let posts: post.Post[] = []
+let keyRSA: ClaveRSA.rsaKeyPair
 
-//Dummy images to show when a client enters in the main page
-posts[0] = post.dummyImages[0];
-posts[1] = post.dummyImages[1];
-posts[2] = post.dummyImages[2];
 
 //Inizializations
 const app = express()
@@ -28,42 +23,51 @@ app.get('/', (req,res)=>{
 
 app.listen(port, function () {
   console.log(`Listening on http://localhost:${port}`)
+
 })
 
-//Upload a file to the posts array
+app.post('/firmar', async (req, res) => {
+  try{
+  var keys = await ClaveRSA.generateKeys(2048);
+  var cegado:string = req.body.cegado;
+  console.log("Request: " + cegado);
+  const firma: bigint = keys.privateKey.sign(bigintConversion.hexToBigint(cegado));
+  console.log(firma);
+  console.log("Firmado: " + bigintConversion.bigintToHex(firma));
+  return res.status(200).json(bigintConversion.bigintToHex(firma));
+} catch (err) {
+  console.log(err);
+  return res.status(400).json(err);
+}})
 
-app.post('/upload', async (req,res)=>{
-    try{
-    const ciphered: cipher.ServerAlert = req.body;
-    let cifrado: cipher.AES;
-    if (ciphered.type === "AES"){
-        const message: string = ciphered.cipher.slice(0, ciphered.cipher.length - 32)
-        const tag: string = ciphered.cipher.slice(ciphered.cipher.length - 32, ciphered.cipher.length)
-        console.log(message + " " + tag);
-        const postDecrypted: Buffer = await aes.decrypt(bigintConversion.hexToBuf(message) as Buffer, bigintConversion.hexToBuf(ciphered.iv) as Buffer, bigintConversion.hexToBuf(tag) as Buffer)
-        const savePost:post.Post = {};
-        posts.push(savePost);
-        res.status(200);
-    }
+app.post('/registrarse', async(req,res) => {
+  console.log("Datos: " + req.body);
+  try{
+    const results = await Subject.find({"subject": {"name": req.body.name}});
+    if(results != null)
+    {
+      Subject.findOneAndUpdate({name: req.params.name}, {"$addToSet": {certificados: req.body.certificado}}).exec(function(err, result) {
+        console.log("Subject Update: ",result);
+        if (err) 
+            return res.status(400).send({message: 'Error'});
+        else
+        return res.status(200).json(result);
+    });}
     else{
-        const bigintDecrypted: bigint = keyRSA.privateKey.decrypt(bigintConversion.hexToBigint(ciphered.key as string))
-        const message: string = ciphered.cipher.slice(0, ciphered.cipher.length - 32)
-        const tag: string = ciphered.cipher.slice(ciphered.cipher.length - 32, ciphered.cipher.length)
-        const postDecrypted: Buffer = await aes.decrypt(bigintConversion.hexToBuf(message) as Buffer, bigintConversion.hexToBuf(ciphered.iv) as Buffer, bigintConversion.hexToBuf(tag) as Buffer, bigintConversion.bigintToBuf(bigintDecrypted) as Buffer)
-        const savePost:post.Post = {};
-        posts.push(savePost);
-        res.status(200);
+      const subject = new Subject({
+        "name": req.body.name,
+        "certificados": [req.body.certificado]
+      });
+      await subject.save().then(result => {
+        return res.status(200).json(result);
+      });
     }
-}catch(err){
-    res.status(500).json(err);
+    return res.status(200).json(results);
+} catch (err) {
+    return res.status(404).json(err);
 }
 })
 
-//Get all Posts we have in the server
-app.get('/allPosts', (req,res)=>{
-    try{
-        res.status(200).json(posts);
-    }catch(err){
-        res.status(500).json(err);
-    }
-})
+const setPrivServer = function(privada: ClaveRSA.RsaPrivateKey) {
+  keyRSA.privateKey = privada;
+}

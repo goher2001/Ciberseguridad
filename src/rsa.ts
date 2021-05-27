@@ -1,4 +1,4 @@
-import bcu from 'bigint-crypto-utils'
+import * as bcu from 'bigint-crypto-utils'
 
 export class RsaPrivateKey {
   d: bigint
@@ -35,19 +35,23 @@ export class RsaPublicKey {
   }
 }
 
-export interface rsaKeyPair {
+export class rsaKeyPair {
   publicKey: RsaPublicKey
   privateKey: RsaPrivateKey
-}
 
+  constructor (publicKey: RsaPublicKey, privateKey: RsaPrivateKey) {
+    this.publicKey = publicKey
+    this.privateKey = privateKey
+  }
+}
 export const generateKeys = async function (bitLength: number): Promise<rsaKeyPair> {
   const e = 65537n
   let p: bigint, q: bigint, n: bigint, phi: bigint
   do {
-    p = await bcu.prime(bitLength / 2 + 1)
-    q = await bcu.prime(bitLength / 2)
-    n = p * q
-    phi = (p - 1n) * (q - 1n)
+      p = await bcu.prime(bitLength / 2 + 1)
+      q = await bcu.prime(bitLength / 2)
+      n = p * q
+      phi = (p - 1n) * (q - 1n)
   } while (bcu.bitLength(n) !== bitLength || (phi % e === 0n))
 
   const publicKey = new RsaPublicKey(e, n)
@@ -56,8 +60,10 @@ export const generateKeys = async function (bitLength: number): Promise<rsaKeyPa
 
   const privKey = new RsaPrivateKey(d, n)
 
-  return {
-    publicKey,
-    privateKey: privKey
-  }
+  var keys : rsaKeyPair = {
+      privateKey : privKey,
+      publicKey : publicKey
+  };
+  
+  return keys;
 }

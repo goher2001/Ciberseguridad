@@ -11,8 +11,3 @@ export interface ServerAlert {
     key?: string
 }
 
-export interface NonRepudiation {
-    cipher: string
-    TimeStamp: string
-    firma?: string
-}
